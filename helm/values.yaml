@@ -1,0 +1,41 @@
+analytics:
+  image: rashesh91/ai-call-analytics:latest
+  replicas: 1
+  port: 8080
+  env:
+    MYSQL_HOST: "mysql-service"
+    MYSQL_PORT: "3306"
+    WHISPER_URL: "http://whisper-service:8001"
+    OLLAMA_URL: "http://ollama-service:11434"
+    OLLAMA_MODEL: "mistral:7b"
+    BATCH_INTERVAL_SECONDS: "60"
+  existingSecret: ai-call-analytics-secret   # contains MYSQL_USER, MYSQL_PASSWORD
+
+whisper:
+  image: rashesh91/ai-call-analytics-whisper:latest
+  replicas: 1
+  port: 8001
+  model: small
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "2"
+
+ollama:
+  image: ollama/ollama:latest
+  port: 11434
+  model: mistral:7b
+  storageSize: 20Gi
+
+recordings:
+  # Mount path for FreeSWITCH recordings (PVC or hostPath)
+  mountPath: /recordings
+  # existingPVC: freeswitch-recordings-pvc
+
+ingress:
+  enabled: true
+  host: ai-analytics.internal
+  className: nginx

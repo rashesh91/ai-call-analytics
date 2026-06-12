@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>AI Call Analytics — CERA India</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg:      #0f172a;
+    --bg2:     #1e293b;
+    --bg3:     #334155;
+    --border:  #475569;
+    --text:    #e2e8f0;
+    --muted:   #94a3b8;
+    --accent:  #6366f1;
+    --accent2: #818cf8;
+    --green:   #22c55e;
+    --yellow:  #eab308;
+    --red:     #ef4444;
+    --blue:    #38bdf8;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;font-size:14px;min-height:100vh}
+  header{background:var(--bg2);border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;gap:12px}
+  header h1{font-size:18px;font-weight:700;color:var(--text)}
+  header .sub{font-size:12px;color:var(--muted);margin-left:auto}
+  .badge{background:var(--accent);color:#fff;font-size:11px;padding:2px 8px;border-radius:12px;font-weight:600}
+  main{padding:20px 24px;max-width:1400px;margin:0 auto}
+
+  /* stat cards */
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px}
+  .card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px}
+  .card .num{font-size:28px;font-weight:700;color:var(--accent2);line-height:1}
+  .card .label{font-size:11px;color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
+  .card.green .num{color:var(--green)}
+  .card.yellow .num{color:var(--yellow)}
+  .card.red .num{color:var(--red)}
+  .card.blue .num{color:var(--blue)}
+
+  /* grid layout */
+  .row{display:grid;gap:16px;margin-bottom:16px}
+  .row.two{grid-template-columns:1fr 1fr}
+  .row.three{grid-template-columns:1.2fr 1fr 1fr}
+  @media(max-width:900px){.row.two,.row.three{grid-template-columns:1fr}}
+
+  .panel{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px}
+  .panel h2{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px}
+
+  /* narrative box */
+  .narrative{background:linear-gradient(135deg,#1e1b4b,#172554);border:1px solid #3730a3;border-radius:10px;padding:16px;margin-bottom:20px}
+  .narrative .title{font-size:11px;font-weight:600;color:#818cf8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+  .narrative p{color:#c7d2fe;font-size:13px;line-height:1.6}
+
+  /* table */
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);color:var(--muted);font-weight:600;text-transform:uppercase;font-size:10px;letter-spacing:.4px}
+  td{padding:8px 10px;border-bottom:1px solid #1e293b;vertical-align:top}
+  tr:hover td{background:var(--bg3)}
+  .pill{display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:600}
+  .pill.product_issue{background:#7f1d1d;color:#fca5a5}
+  .pill.installation{background:#1c1917;color:#d6d3d1;border:1px solid #44403c}
+  .pill.delivery{background:#1e3a5f;color:#93c5fd}
+  .pill.warranty{background:#1a2e05;color:#86efac}
+  .pill.billing{background:#2d1b69;color:#c4b5fd}
+  .pill.general_inquiry{background:#0c2340;color:#7dd3fc}
+  .pill.other{background:#1e293b;color:#94a3b8}
+  .sent-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
+  .sent-dot.frustrated{background:var(--red)}
+  .sent-dot.neutral{background:var(--yellow)}
+  .sent-dot.satisfied{background:var(--green)}
+  .summary-text{color:var(--muted);max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  /* date control */
+  .controls{display:flex;gap:8px;align-items:center;margin-bottom:20px;flex-wrap:wrap}
+  .controls label{color:var(--muted);font-size:12px}
+  .controls input{background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px}
+  .controls button{background:var(--accent);color:#fff;border:none;padding:7px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600}
+  .controls button:hover{background:var(--accent2)}
+  .controls button.secondary{background:var(--bg3);color:var(--text)}
+
+  /* loading */
+  .loading{text-align:center;padding:40px;color:var(--muted);font-size:13px}
+  .error{background:#450a0a;border:1px solid var(--red);border-radius:8px;padding:12px;color:#fca5a5;font-size:12px;margin-bottom:12px}
+
+  /* tabs */
+  .tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:0}
+  .tab{padding:8px 16px;cursor:pointer;color:var(--muted);font-size:13px;font-weight:500;border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tab.active{color:var(--accent2);border-bottom-color:var(--accent2)}
+  .tab-content{display:none}
+  .tab-content.active{display:block}
+
+  .chart-wrap{height:220px;position:relative}
+  .pagination{display:flex;gap:6px;margin-top:12px;align-items:center;justify-content:flex-end}
+  .pagination button{background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px}
+  .pagination button.active{background:var(--accent);border-color:var(--accent)}
+  .pagination button:disabled{opacity:.4;cursor:default}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="badge">AI</span>
+  <h1>Call Analytics Dashboard</h1>
+  <span class="sub" id="last-updated">Loading…</span>
+</header>
+
+<main>
+  <div id="error-box" style="display:none" class="error"></div>
+
+  <!-- tabs -->
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('overview')">Overview</div>
+    <div class="tab" onclick="switchTab('daily')">Daily Report</div>
+    <div class="tab" onclick="switchTab('calls')">Call Log</div>
+  </div>
+
+  <!-- OVERVIEW TAB -->
+  <div class="tab-content active" id="tab-overview">
+    <div class="cards" id="stat-cards">
+      <div class="loading">Loading stats…</div>
+    </div>
+
+    <div class="row three">
+      <div class="panel">
+        <h2>Category Breakdown</h2>
+        <div class="chart-wrap"><canvas id="catChart"></canvas></div>
+      </div>
+      <div class="panel">
+        <h2>Sentiment Distribution</h2>
+        <div class="chart-wrap"><canvas id="sentChart"></canvas></div>
+      </div>
+      <div class="panel">
+        <h2>Language Breakdown</h2>
+        <div class="chart-wrap"><canvas id="langChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="row two">
+      <div class="panel">
+        <h2>Calls — Last 7 Days</h2>
+        <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+      </div>
+      <div class="panel" id="top-categories-panel">
+        <h2>Top Issues</h2>
+        <div id="top-cat-list"><div class="loading">…</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DAILY TAB -->
+  <div class="tab-content" id="tab-daily">
+    <div class="controls">
+      <label>Date:</label>
+      <input type="date" id="daily-date" value=""/>
+      <button onclick="loadDaily()">Load Report</button>
+    </div>
+    <div id="narrative-box" class="narrative" style="display:none">
+      <div class="title">AI Generated Summary</div>
+      <p id="narrative-text"></p>
+    </div>
+    <div class="row two" id="daily-charts" style="display:none">
+      <div class="panel">
+        <h2>Categories</h2>
+        <div class="chart-wrap"><canvas id="dailyCatChart"></canvas></div>
+      </div>
+      <div class="panel">
+        <h2>Sentiments</h2>
+        <div class="chart-wrap"><canvas id="dailySentChart"></canvas></div>
+      </div>
+    </div>
+    <div id="daily-loading" class="loading" style="display:none">Generating report…</div>
+  </div>
+
+  <!-- CALLS TAB -->
+  <div class="tab-content" id="tab-calls">
+    <div class="controls">
+      <label>Filter category:</label>
+      <select id="cat-filter" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px">
+        <option value="">All</option>
+        <option value="product_issue">Product Issue</option>
+        <option value="installation">Installation</option>
+        <option value="delivery">Delivery</option>
+        <option value="warranty">Warranty</option>
+        <option value="billing">Billing</option>
+        <option value="general_inquiry">General Inquiry</option>
+        <option value="other">Other</option>
+      </select>
+      <button onclick="loadCalls(1)">Filter</button>
+      <button class="secondary" onclick="triggerBatch()">Process Pending</button>
+    </div>
+    <div class="panel">
+      <table id="calls-table">
+        <thead><tr>
+          <th>Date</th><th>Caller</th><th>Language</th><th>Duration</th>
+          <th>Category</th><th>Sentiment</th><th>Resolved</th><th>AI Summary</th>
+        </tr></thead>
+        <tbody id="calls-body"><tr><td colspan="8" class="loading">Loading…</td></tr></tbody>
+      </table>
+      <div class="pagination" id="pagination"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+const API = '';
+let catChartInst, sentChartInst, langChartInst, trendChartInst, dailyCatInst, dailySentInst;
+let currentPage = 1;
+
+const COLORS = {
+  product_issue:'#ef4444', installation:'#94a3b8', delivery:'#38bdf8',
+  warranty:'#22c55e', billing:'#a78bfa', general_inquiry:'#fb923c', other:'#64748b',
+  frustrated:'#ef4444', neutral:'#eab308', satisfied:'#22c55e',
+};
+const LANG_COLORS = ['#6366f1','#22c55e','#f59e0b','#38bdf8','#ec4899','#84cc16'];
+const CAT_LABELS = {
+  product_issue:'Product Issue', installation:'Installation', delivery:'Delivery',
+  warranty:'Warranty', billing:'Billing', general_inquiry:'General Inquiry', other:'Other',
+};
+
+function switchTab(name){
+  document.querySelectorAll('.tab,.tab-content').forEach(el=>el.classList.remove('active'));
+  document.querySelector(`.tab[onclick*="${name}"]`).classList.add('active');
+  document.getElementById(`tab-${name}`).classList.add('active');
+}
+
+function showError(msg){
+  const el=document.getElementById('error-box');
+  el.textContent=msg; el.style.display='block';
+  setTimeout(()=>el.style.display='none',5000);
+}
+
+async function apiFetch(path){
+  const r=await fetch(API+path);
+  if(!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+  return r.json();
+}
+
+function makeChart(id, type, labels, data, colors, inst){
+  if(inst) inst.destroy();
+  const ctx=document.getElementById(id).getContext('2d');
+  return new Chart(ctx,{
+    type,
+    data:{labels, datasets:[{data, backgroundColor:colors, borderColor: type==='line'?colors[0]:'transparent',
+      borderWidth: type==='line'?2:0, fill: type==='line', tension:.4,
+      pointBackgroundColor: type==='line'?colors[0]:'transparent'}]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display: type!=='line', position:'right',
+        labels:{color:'#94a3b8',font:{size:11},padding:8,boxWidth:12}}},
+      scales: type==='line'?{
+        x:{ticks:{color:'#94a3b8',font:{size:10}},grid:{color:'#1e293b'}},
+        y:{ticks:{color:'#94a3b8',font:{size:10}},grid:{color:'#1e293b'},beginAtZero:true}
+      }:{},
+    }
+  });
+}
+
+async function loadStats(){
+  try{
+    const s=await apiFetch('/stats');
+    // stat cards
+    const pct = s.total_calls>0?Math.round(s.analyzed_calls/s.total_calls*100):0;
+    const frustrated = s.sentiments['frustrated']||0;
+    const frustPct = s.analyzed_calls>0?Math.round(frustrated/s.analyzed_calls*100):0;
+    document.getElementById('stat-cards').innerHTML=`
+      <div class="card blue"><div class="num">${s.total_calls}</div><div class="label">Total Calls</div></div>
+      <div class="card green"><div class="num">${s.analyzed_calls}</div><div class="label">AI Analyzed</div></div>
+      <div class="card"><div class="num">${pct}%</div><div class="label">Coverage</div></div>
+      <div class="card yellow"><div class="num">${s.pending_calls}</div><div class="label">Pending</div></div>
+      <div class="card ${frustPct>30?'red':'green'}"><div class="num">${frustPct}%</div><div class="label">Frustration Rate</div></div>
+      <div class="card"><div class="num">${Math.round(s.avg_duration_seconds)}s</div><div class="label">Avg Duration</div></div>
+    `;
+
+    // Category chart
+    const catKeys=Object.keys(s.categories);
+    catChartInst=makeChart('catChart','doughnut',
+      catKeys.map(k=>CAT_LABELS[k]||k), Object.values(s.categories),
+      catKeys.map(k=>COLORS[k]||'#64748b'), catChartInst);
+
+    // Sentiment chart
+    const sentKeys=Object.keys(s.sentiments);
+    sentChartInst=makeChart('sentChart','doughnut',
+      sentKeys.map(k=>k.charAt(0).toUpperCase()+k.slice(1)), Object.values(s.sentiments),
+      sentKeys.map(k=>COLORS[k]||'#64748b'), sentChartInst);
+
+    // Language chart
+    const langKeys=Object.keys(s.languages);
+    langChartInst=makeChart('langChart','doughnut',
+      langKeys.map(k=>k.charAt(0).toUpperCase()+k.slice(1)), Object.values(s.languages),
+      langKeys.map((_,i)=>LANG_COLORS[i%LANG_COLORS.length]), langChartInst);
+
+    // Trend chart
+    const trendDates=s.last_7_days_trend.map(r=>r.date.slice(5));
+    const trendCounts=s.last_7_days_trend.map(r=>r.count);
+    trendChartInst=makeChart('trendChart','line',trendDates,[trendCounts],
+      ['#6366f1'], trendChartInst);
+
+    // Top categories list
+    const sorted=Object.entries(s.categories).sort((a,b)=>b[1]-a[1]);
+    const total=Object.values(s.categories).reduce((a,b)=>a+b,0)||1;
+    document.getElementById('top-cat-list').innerHTML=sorted.map(([k,v])=>`
+      <div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <span style="font-size:12px">${CAT_LABELS[k]||k}</span>
+          <span style="font-size:12px;color:var(--muted)">${v} (${Math.round(v/total*100)}%)</span>
+        </div>
+        <div style="background:var(--bg3);border-radius:4px;height:6px;overflow:hidden">
+          <div style="background:${COLORS[k]||'#64748b'};height:100%;width:${Math.round(v/total*100)}%;border-radius:4px"></div>
+        </div>
+      </div>`).join('');
+
+    document.getElementById('last-updated').textContent='Updated '+new Date().toLocaleTimeString();
+  }catch(e){showError('Failed to load stats: '+e.message)}
+}
+
+async function loadDaily(){
+  const dateVal=document.getElementById('daily-date').value;
+  if(!dateVal){showError('Please select a date');return}
+  document.getElementById('daily-loading').style.display='block';
+  document.getElementById('narrative-box').style.display='none';
+  document.getElementById('daily-charts').style.display='none';
+  try{
+    const r=await apiFetch('/report/daily?date='+dateVal);
+    document.getElementById('narrative-text').textContent=r.narrative;
+    document.getElementById('narrative-box').style.display='block';
+
+    const catKeys=Object.keys(r.categories);
+    if(catKeys.length>0){
+      dailyCatInst=makeChart('dailyCatChart','bar',
+        catKeys.map(k=>CAT_LABELS[k]||k), Object.values(r.categories),
+        catKeys.map(k=>COLORS[k]||'#64748b'), dailyCatInst);
+      const sentKeys=Object.keys(r.sentiments);
+      dailySentInst=makeChart('dailySentChart','bar',
+        sentKeys.map(k=>k.charAt(0).toUpperCase()+k.slice(1)), Object.values(r.sentiments),
+        sentKeys.map(k=>COLORS[k]||'#64748b'), dailySentInst);
+      document.getElementById('daily-charts').style.display='grid';
+    }
+  }catch(e){showError('Failed to load report: '+e.message)}
+  finally{document.getElementById('daily-loading').style.display='none'}
+}
+
+function sentIcon(s){
+  const cls={'frustrated':'red','neutral':'yellow','satisfied':'green'}[s]||'';
+  return `<span class="sent-dot ${s}"></span>${s||'—'}`;
+}
+
+async function loadCalls(page){
+  currentPage=page;
+  const cat=document.getElementById('cat-filter').value;
+  const url=`/calls?page=${page}&limit=20${cat?'&category='+cat:''}`;
+  try{
+    const r=await apiFetch(url);
+    const rows=r.calls;
+    if(!rows.length){
+      document.getElementById('calls-body').innerHTML='<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--muted)">No analyzed calls yet. Click "Process Pending" to start.</td></tr>';
+      document.getElementById('pagination').innerHTML='';
+      return;
+    }
+    document.getElementById('calls-body').innerHTML=rows.map(c=>`
+      <tr>
+        <td>${c.call_date?c.call_date.substring(0,16).replace('T',' '):''}</td>
+        <td style="font-family:monospace">${c.caller_number||'—'}</td>
+        <td>${c.language||'—'}</td>
+        <td>${c.duration||0}s</td>
+        <td><span class="pill ${c.ai_category||'other'}">${CAT_LABELS[c.ai_category]||c.ai_category||'—'}</span></td>
+        <td>${sentIcon(c.ai_sentiment)}</td>
+        <td>${c.ai_resolved?'<span style="color:var(--green)">✓ Yes</span>':'<span style="color:var(--muted)">No</span>'}</td>
+        <td class="summary-text" title="${(c.ai_summary||'').replace(/"/g,'&quot;')}">${c.ai_summary||'—'}</td>
+      </tr>`).join('');
+
+    const pg=document.getElementById('pagination');
+    pg.innerHTML=`
+      <button onclick="loadCalls(${page-1})" ${page<=1?'disabled':''}>‹ Prev</button>
+      <span style="color:var(--muted);font-size:12px;padding:0 6px">Page ${page}</span>
+      <button onclick="loadCalls(${page+1})" ${rows.length<20?'disabled':''}>Next ›</button>`;
+  }catch(e){showError('Failed to load calls: '+e.message)}
+}
+
+async function triggerBatch(){
+  try{
+    const r=await fetch(API+'/analyze/batch',{method:'POST'});
+    const d=await r.json();
+    alert(`Queued ${d.queued} calls for analysis. Check back in a few minutes.`);
+  }catch(e){showError('Batch trigger failed: '+e.message)}
+}
+
+// set today's date as default
+const today=new Date().toISOString().slice(0,10);
+document.getElementById('daily-date').value=today;
+
+// initial load
+loadStats();
+loadCalls(1);
+setInterval(loadStats, 30000);
+</script>
+</body>
+</html>

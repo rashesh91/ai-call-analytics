@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics
+  labels:
+    app: ai-call-analytics
+spec:
+  replicas: {{ .Values.analytics.replicas }}
+  selector:
+    matchLabels:
+      app: analytics
+  template:
+    metadata:
+      labels:
+        app: analytics
+    spec:
+      containers:
+      - name: analytics
+        image: {{ .Values.analytics.image }}
+        ports:
+        - containerPort: {{ .Values.analytics.port }}
+        env:
+        {{- range $k, $v := .Values.analytics.env }}
+        - name: {{ $k }}
+          value: {{ $v | quote }}
+        {{- end }}
+        - name: MYSQL_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.analytics.existingSecret }}
+              key: mysql-user
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.analytics.existingSecret }}
+              key: mysql-password
+        {{- if .Values.recordings.existingPVC }}
+        volumeMounts:
+        - name: recordings
+          mountPath: {{ .Values.recordings.mountPath }}
+          readOnly: true
+        {{- end }}
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: {{ .Values.analytics.port }}
+          initialDelaySeconds: 15
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: {{ .Values.analytics.port }}
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      {{- if .Values.recordings.existingPVC }}
+      volumes:
+      - name: recordings
+        persistentVolumeClaim:
+          claimName: {{ .Values.recordings.existingPVC }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: analytics-service
+spec:
+  selector:
+    app: analytics
+  ports:
+  - port: {{ .Values.analytics.port }}
+    targetPort: {{ .Values.analytics.port }}
+---
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: analytics-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+  - host: {{ .Values.ingress.host }}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: analytics-service
+            port:
+              number: {{ .Values.analytics.port }}
+{{- end }}

@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: whisper
+  labels:
+    app: ai-call-analytics
+spec:
+  replicas: {{ .Values.whisper.replicas }}
+  selector:
+    matchLabels:
+      app: whisper
+  template:
+    metadata:
+      labels:
+        app: whisper
+    spec:
+      containers:
+      - name: whisper
+        image: {{ .Values.whisper.image }}
+        ports:
+        - containerPort: {{ .Values.whisper.port }}
+        env:
+        - name: WHISPER_MODEL
+          value: {{ .Values.whisper.model | quote }}
+        resources:
+          {{- toYaml .Values.whisper.resources | nindent 10 }}
+        volumeMounts:
+        - name: model-cache
+          mountPath: /root/.cache/huggingface
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: {{ .Values.whisper.port }}
+          initialDelaySeconds: 60
+          periodSeconds: 30
+      volumes:
+      - name: model-cache
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: whisper-service
+spec:
+  selector:
+    app: whisper
+  ports:
+  - port: {{ .Values.whisper.port }}
+    targetPort: {{ .Values.whisper.port }}

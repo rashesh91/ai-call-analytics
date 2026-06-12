@@ -1,0 +1,81 @@
+version: "3.9"
+
+services:
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: lintel@365
+      MYSQL_DATABASE: symphony
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3307:3306"          # 3307 on host to avoid conflict with local MySQL
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-plintel@365"]
+      interval: 10s
+      retries: 10
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      interval: 15s
+      retries: 20
+    # Pull model on first start
+    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull mistral:7b && wait"]
+
+  whisper:
+    build: ./whisper
+    environment:
+      WHISPER_MODEL: small          # change to "medium" for better accuracy
+    volumes:
+      - whisper_cache:/root/.cache/huggingface
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8001/health || exit 1"]
+      interval: 30s
+      retries: 10
+
+  analytics:
+    build:
+      context: .
+      dockerfile: analytics/Dockerfile
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: root
+      MYSQL_PASSWORD: lintel@365
+      MYSQL_DATABASE: symphony
+      WHISPER_URL: http://whisper:8001
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: mistral:7b
+      RECORDINGS_DIR: /recordings
+      BATCH_INTERVAL_SECONDS: "60"
+    volumes:
+      # Mount your actual recording directory here for production:
+      # - /opt/symphony/recording:/recordings:ro
+      - ./recordings_sample:/recordings:ro
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+      whisper:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
+      interval: 15s
+      retries: 10
+
+volumes:
+  mysql_data:
+  ollama_data:
+  whisper_cache:
