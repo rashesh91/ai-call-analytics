@@ -7,20 +7,27 @@
 
 ## Real-World Use Case
 
-A sanitaryware manufacturer (CERA India) handles 200+ IVR calls per day across
-5 languages (English, Hindi, Gujarati, Tamil, Telugu). Managers were manually listening
-to random call samples to understand complaint trends. After adding AI analytics:
+A manufacturing company handles 200+ IVR calls per day across multiple languages
+(English, Hindi, Gujarati, Tamil, Telugu). Managers were manually listening to random
+call samples to understand complaint trends. After adding AI analytics:
 
 - Manager opens dashboard every Monday morning
-- Sees: "43% installation complaints this week, Ahmedabad top area, sentiment improving"
+- Sees: "43% installation complaints this week, top region identified, sentiment improving"
 - Flagged: "6 calls with frustrated sentiment on Friday — all about delayed delivery"
 - Zero calls listened to manually
+
+**Industries that benefit from this platform:**
+- Consumer goods manufacturers (appliances, sanitaryware, electronics)
+- Telecom service providers
+- BFSI customer support centres
+- Healthcare and insurance IVR systems
+- Any business running a FreeSWITCH or Asterisk IVR
 
 ## Architecture
 
 ```
 FreeSWITCH RECORD_STOP event
-  → symphony-ivr ivr_1.py (existing, unchanged)
+  → Existing IVR application (unchanged)
       → analytics_webhook.fire_analysis(call_uuid, rec_path)  [1 line added]
           ↓  fire-and-forget (does NOT block call)
   → analytics-service (FastAPI)
@@ -53,15 +60,15 @@ open http://localhost:8080
 
 **System requirements:** 8GB RAM minimum (Mistral 7B runs on CPU)
 
-## Connect to Your Existing symphony-ivr
+## Connect to Your Existing FreeSWITCH IVR
 
-Add **one line** to `ivr_1.py`:
+Add **one line** to your IVR application's hangup handler:
 
 ```python
-# At the top of ivr_1.py:
+# At the top of your IVR module:
 from ivr_hook.analytics_webhook import fire_analysis
 
-# In channel_hangup_complete() method:
+# In your channel_hangup_complete() method:
 def channel_hangup_complete(self, event):
     ...
     fire_analysis(self.call_uuid, self.rec_file_path)  # ← add this line
@@ -75,16 +82,16 @@ export ANALYTICS_URL=http://analytics-service:8080
 The hook is fire-and-forget — it runs in a background thread and does not block
 the FreeSWITCH call flow.
 
-## Connect to Production MySQL (symphony database)
+## Connect to Your Production MySQL Database
 
-For your existing symphony production database, run the migration:
+Run the migration on your existing IVR database:
 
 ```bash
-mysql -u root -p symphony < migration/add_ai_columns.sql
+mysql -u root -p <your_database> < migration/add_ai_columns.sql
 ```
 
-Then update docker-compose.yml analytics service to point to your MySQL host
-instead of the bundled container.
+Then set the `MYSQL_DATABASE` environment variable to your database name.
+All existing tables and data remain untouched — the migration only adds new `ai_*` columns.
 
 ## API Reference
 
@@ -105,8 +112,8 @@ instead of the bundled container.
 ```bash
 # Create secret
 kubectl create secret generic ai-call-analytics-secret \
-  --from-literal=mysql-user=root \
-  --from-literal=mysql-password=lintel@365
+  --from-literal=mysql-user=<db-user> \
+  --from-literal=mysql-password=<db-password>
 
 # Install
 helm install ai-call-analytics ./helm \
@@ -121,18 +128,18 @@ helm install ai-call-analytics ./helm \
 | **FastAPI** | Analytics API + dashboard server |
 | **faster-whisper** | Speech-to-text (CPU, multilingual) |
 | **Ollama + Mistral 7B** | LLM analysis (runs locally, no OpenAI cost) |
-| **MySQL** | Same database as symphony-ivr |
+| **MySQL** | Works with your existing IVR database |
 | **Docker Compose** | Local development |
 | **Helm + ArgoCD** | Kubernetes production deployment |
 
 ## Languages Supported
 
 Whisper auto-detects: English, Hindi, Gujarati, Tamil, Telugu (and 90+ others).
-Mistral understands all Indian languages in transcripts.
+Mistral understands transcripts in all major Indian languages.
 
 ## Interview Narrative
 
-*"We had 200+ calls per day at the client's IVR system. Managers were manually listening
+*"Our client's IVR system handles 200+ calls per day. Managers were manually listening
 to random call samples — very inefficient. I added an AI layer: Whisper transcribes
 each recording after hang-up, Mistral extracts complaint category, sentiment, and product
 model mentioned, all stored back in the existing MySQL database. The manager now opens
