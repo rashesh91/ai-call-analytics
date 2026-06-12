@@ -41,24 +41,183 @@ FreeSWITCH RECORD_STOP event
       → Call log with AI summaries
 ```
 
-## Quick Start (docker-compose)
+## Server Requirements
+
+| Resource | Minimum | Recommended |
+|----------|---------|-------------|
+| **RAM** | 8 GB | 16 GB |
+| **CPU** | 4 cores | 8 cores |
+| **Disk** | 20 GB free | 40 GB free |
+| **OS** | Ubuntu 20.04 / RHEL 8 | Ubuntu 22.04 LTS |
+
+> Mistral 7B runs on CPU — no GPU required. The model file is ~4 GB; Whisper `small` is ~500 MB.
+> With 8 GB RAM, analysis of a single call takes 8–15 seconds. With 16 GB, it takes 3–6 seconds.
+
+---
+
+## Prerequisites
+
+### Option A — Docker (recommended)
+
+| Dependency | Minimum version | Install |
+|------------|----------------|---------|
+| **Docker Engine** | 24.0+ | `sudo apt install docker.io` |
+| **Docker Compose** | v2.20+ | `sudo apt install docker-compose-plugin` |
+| **curl** | any | `sudo apt install curl` |
+
+Verify:
+```bash
+docker --version          # Docker version 24.x.x
+docker compose version    # Docker Compose version v2.x.x
+```
+
+### Option B — Local / No Docker
+
+| Dependency | Minimum version | Notes |
+|------------|----------------|-------|
+| **Python** | 3.10+ | `python3 --version` |
+| **pip** | 23+ | `pip3 --version` |
+| **MySQL** | 8.0+ or MariaDB 10.6+ | Must be running locally |
+| **Ollama** | latest | Runs Mistral 7B locally |
+
+Verify:
+```bash
+python3 --version          # Python 3.10.x or higher
+mysql --version            # MySQL 8.x or MariaDB 10.6
+ollama --version           # ollama version x.x.x
+```
+
+### Kubernetes (production)
+
+| Dependency | Minimum version |
+|------------|----------------|
+| **kubectl** | 1.27+ |
+| **Helm** | 3.12+ |
+| **Kubernetes cluster** | 1.27+ |
+
+---
+
+## Installation
+
+### Option A — Docker Compose (full stack, recommended)
 
 ```bash
-# 1. Start all services (MySQL + Ollama + Whisper + Analytics)
-docker-compose up -d
+# 1. Clone the repository
+git clone https://github.com/rashesh91/ai-call-analytics.git
+cd ai-call-analytics
 
-# 2. Wait for Ollama to pull Mistral 7B (~4GB first time)
-docker-compose logs -f ollama
+# 2. Start all services (MySQL + Ollama + Whisper + Analytics)
+docker compose up -d
 
-# 3. Seed demo data and run AI analysis
+# 3. Wait for Ollama to finish pulling Mistral 7B (~4 GB, first run only)
+docker compose logs -f ollama
+# You will see "success" when the model is ready
+
+# 4. Wait for all services to pass health checks (~3–5 minutes first time)
+docker compose ps   # all services should show "healthy"
+
+# 5. Seed demo data (pre-computed — no AI processing wait needed)
 pip3 install pymysql requests
-MYSQL_HOST=localhost MYSQL_PORT=3307 python3 simulator/seed_demo_data.py
+MYSQL_HOST=localhost MYSQL_PORT=3307 python3 simulator/seed_local.py
 
-# 4. Open dashboard
+# 6. Open the dashboard
+open http://localhost:8080        # macOS
+xdg-open http://localhost:8080   # Linux
+```
+
+**Environment variables** — override defaults in `docker-compose.yml`:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MYSQL_HOST` | `mysql` | MySQL hostname |
+| `MYSQL_PORT` | `3306` | MySQL port |
+| `MYSQL_USER` | `root` | MySQL user |
+| `MYSQL_PASSWORD` | `lintel@365` | MySQL password — **change in production** |
+| `MYSQL_DATABASE` | `symphony` | Database name |
+| `WHISPER_URL` | `http://whisper:8001` | Whisper service URL |
+| `OLLAMA_URL` | `http://ollama:11434` | Ollama service URL |
+| `OLLAMA_MODEL` | `mistral:7b` | LLM model name |
+| `BATCH_INTERVAL_SECONDS` | `60` | Scan interval for unanalyzed calls |
+
+---
+
+### Option B — Local / No Docker (demo without Docker)
+
+Use this path when Docker is not available or you want to connect to an existing MySQL.
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/rashesh91/ai-call-analytics.git
+cd ai-call-analytics
+
+# 2. Install Python dependencies
+pip3 install -r analytics/requirements.txt --break-system-packages
+
+# 3. Install Ollama and pull Mistral 7B (~4 GB download, one-time)
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull mistral:7b
+
+# 4. Set up MySQL database
+mysql -u root -p <<EOF
+CREATE DATABASE IF NOT EXISTS symphony;
+CREATE USER IF NOT EXISTS 'demo'@'localhost' IDENTIFIED BY 'demo123';
+GRANT ALL PRIVILEGES ON symphony.* TO 'demo'@'localhost';
+FLUSH PRIVILEGES;
+EOF
+
+# 5. Start the analytics service
+export MYSQL_HOST=localhost MYSQL_PORT=3306 MYSQL_USER=demo
+export MYSQL_PASSWORD=demo123 MYSQL_DATABASE=symphony
+export OLLAMA_URL=http://localhost:11434
+
+cd analytics && uvicorn app.main:app --host 0.0.0.0 --port 8080 &
+
+# 6. Seed demo data (pre-computed — no Whisper/Ollama needed)
+cd .. && pip3 install pymysql --break-system-packages
+MYSQL_HOST=localhost MYSQL_PORT=3306 python3 simulator/seed_local.py
+
+# 7. Open dashboard
 open http://localhost:8080
 ```
 
-**System requirements:** 8GB RAM minimum (Mistral 7B runs on CPU)
+> The seed script (`seed_local.py`) inserts pre-computed AI results directly — the
+> dashboard is fully populated without Whisper or Ollama running.
+
+---
+
+### Verify Installation
+
+```bash
+# Service health (should show whisper + ollama status)
+curl http://localhost:8080/health
+# {"status":"ok","whisper":true,"ollama":true}
+
+# Overall stats (confirms data is seeded)
+curl http://localhost:8080/stats
+# {"total_calls":272,"analyzed_calls":272,...}
+
+# Dashboard responds
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/
+# 200
+```
+
+---
+
+## Quick Start (docker-compose)
+
+```bash
+# Start all services
+docker compose up -d
+
+# Wait for Ollama to pull Mistral 7B (~4 GB, first run only)
+docker compose logs -f ollama
+
+# Seed demo data
+MYSQL_HOST=localhost MYSQL_PORT=3307 python3 simulator/seed_local.py
+
+# Open dashboard
+open http://localhost:8080
+```
 
 ## Connect to Your Existing FreeSWITCH IVR
 

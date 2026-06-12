@@ -1,5 +1,7 @@
 import logging
 import asyncio
+import os
+import pathlib
 from contextlib import asynccontextmanager
 from datetime import date, timedelta
 
@@ -216,9 +218,14 @@ async def _generate_narrative(date_str, stats, top_cat, top_sent) -> str:
         return resp.json().get("response", "").strip()
 
 
-app.mount("/dashboard", StaticFiles(directory="/app/static", html=True), name="static")
+import pathlib
+_STATIC_DIR = os.environ.get(
+    "STATIC_DIR",
+    str(pathlib.Path(__file__).parent.parent.parent / "dashboard")
+)
+app.mount("/dashboard", StaticFiles(directory=_STATIC_DIR, html=True), name="static")
 
 
 @app.get("/")
 async def root():
-    return FileResponse("/app/static/index.html")
+    return FileResponse(os.path.join(_STATIC_DIR, "index.html"))
